@@ -1,6 +1,6 @@
 # 局域网屏幕共享软件
 
-基于 **C++ / Qt 6.5 / libwebrtc** 实现的局域网屏幕共享工具，支持 Windows 和 macOS。
+基于 **C++ / Qt/ WebRtc** 实现的局域网屏幕共享工具，支持 Windows 和 macOS。
 
 ---
 
@@ -31,32 +31,6 @@
 
 ---
 
-## 开发环境搭建
-
-### 1. 安装 Qt 6.5 LTS
-前往 [Qt 官网](https://www.qt.io/download) 下载安装包。
-- Windows：选择 **MSVC 2022** 编译器
-- macOS：选择 **Clang** 编译器
-
-### 2. 获取 libwebrtc 预编译包
-
-> ⚠️ 不要自行编译源码（需 30GB 磁盘 + 数小时），直接使用预编译包
-
-前往 [libwebrtc-bin Releases](https://github.com/crow-misia/libwebrtc-bin/releases) 下载对应平台：
-- Windows：`libwebrtc-win-x64.zip`
-- macOS Apple Silicon：`libwebrtc-mac-arm64.zip`
-- macOS Intel：`libwebrtc-mac-x64.zip`
-
-解压到项目根目录 `third_party/libwebrtc/` 下。
-
-### 3. 编译项目
-```bash
-cmake -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.5.0
-cmake --build build
-```
-
----
-
 ## Git 工作流
 
 ```bash
@@ -74,18 +48,3 @@ git push origin jzy
 
 > 每人只在自己的分支开发，不要直接提交到 `main`。
 
----
-
-## 注意事项
-
-- **macOS 屏幕权限**：首次运行需在「系统设置 → 隐私与安全性 → 屏幕录制」中手动授权，否则采集到黑屏
-- **Windows/macOS 像素格式不同**：Windows 截图为 BGRA，macOS 为 ARGB，使用 libyuv 转换时注意区分
-- **遇到问题**：卡超过 1 小时立刻发群里，不要一个人闷头卡着
-
----
-
-## 参考资料
-
-- [libwebrtc-bin 预编译包](https://github.com/crow-misia/libwebrtc-bin)
-- [Qt 6.5 文档](https://doc.qt.io/qt-6/)
-- [WebRTC DesktopCapturer](https://chromium.googlesource.com/external/webrtc/+/refs/heads/master/modules/desktop_capture/)
