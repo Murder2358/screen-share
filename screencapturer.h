@@ -1,5 +1,5 @@
 #pragma once
-
+#define NOMINMAX
 #include <QObject>
 #include <QImage>
 #include <QSize>
