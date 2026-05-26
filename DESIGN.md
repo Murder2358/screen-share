@@ -37,8 +37,14 @@ Receiver（接收端，队友负责）
 - **缺点**：无法截取受 DRM 保护的视频/游戏内容，帧率上限约 30fps
 
 ### 第二期（性能优化）：DXGI Desktop Duplication API（Windows）
+- **状态**：已实现 DXGI 采集路径（`captureWithDXGI()`）
 - **优点**：GPU 直接输出，能截到视频/游戏内容，可达 60fps
-- **切换方式**：只需替换 `captureFrame()` 内部实现，对外信号接口不变
+- **自动降级**：`captureFrame()` 先尝试 DXGI；若初始化或取帧失败则自动降级到 `captureWithGrabWindow()`，并关闭后续 DXGI 重试
+- **关键成员**：
+  - `bool m_useDXGI{true}`：是否尝试 DXGI
+  - `m_d3dDevice / m_d3dContext / m_duplication`：缓存 D3D11 与 Desktop Duplication 对象，只初始化一次
+  - `m_stagingTexture`：缓存 CPU 可读纹理，避免每帧重复创建
+- **兼容性**：所有 DXGI/D3D11 代码均使用 `#ifdef Q_OS_WIN` 包裹，macOS/非 Windows 仅走 `grabWindow()` 路径
 
 ---
 

@@ -5,6 +5,12 @@
 #include <QSize>
 #include <QTimer>
 
+#ifdef Q_OS_WIN
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <wrl/client.h>
+#endif
+
 class ScreenCapturer : public QObject
 {
     Q_OBJECT
@@ -28,7 +34,20 @@ private slots:
     void captureFrame();
 
 private:
+    bool captureWithDXGI();
+    void captureWithGrabWindow();
+
     QTimer* m_timer;
     QSize   m_outputSize{1280, 720};
+    bool    m_useDXGI{true};
     bool    m_running{false};
+
+#ifdef Q_OS_WIN
+    Microsoft::WRL::ComPtr<ID3D11Device> m_d3dDevice;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_d3dContext;
+    Microsoft::WRL::ComPtr<IDXGIOutputDuplication> m_duplication;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> m_stagingTexture;
+    UINT m_captureWidth{0};
+    UINT m_captureHeight{0};
+#endif
 };
