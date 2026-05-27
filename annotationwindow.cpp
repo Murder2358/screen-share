@@ -3,9 +3,201 @@
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSlider>
 #include <QWidget>
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FloatingToolbar – a draggable, always-on-top toolbar widget
+// ══════════════════════════════════════════════════════════════════════════════
+
+class FloatingToolbar : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit FloatingToolbar(QWidget* parent = nullptr);
+
+    // Emits when any state changes that the overlay needs to react to
+signals:
+    void colorSelected(const QColor& color);
+    void widthChanged(float width);
+    void eraserToggled(bool on);
+    void undoRequested();
+    void redoRequested();
+    void clearRequested();
+    void exitRequested();
+    void geometryChanged();   // emitted after a drag move
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+
+private:
+    QPoint  m_dragStart;
+    bool    m_dragging = false;
+    bool    m_eraserOn = false;
+    QPushButton* m_eraserButton = nullptr;
+
+    // Helper to mark which color button is "active"
+    QList<QPushButton*> m_colorButtons;
+    void highlightColorButton(QPushButton* selected);
+};
+
+FloatingToolbar::FloatingToolbar(QWidget* parent)
+    : QWidget(parent,
+              Qt::Tool
+              | Qt::FramelessWindowHint
+              | Qt::WindowStaysOnTopHint)
+{
+    setAttribute(Qt::WA_TranslucentBackground, true);
+    setStyleSheet(QStringLiteral(
+        "QWidget#FloatingToolbar { background: rgba(30,30,30,200); border-radius: 10px; }"
+        "QPushButton { color: white; background: rgba(60,60,60,220); border: none;"
+        "              border-radius: 6px; padding: 4px 8px; font-size: 14px; }"
+        "QPushButton:hover { background: rgba(90,90,90,220); }"
+        "QPushButton:pressed { background: rgba(40,40,40,220); }"
+    ));
+    setObjectName(QStringLiteral("FloatingToolbar"));
+
+    auto* layout = new QHBoxLayout(this);
+    layout->setContentsMargins(10, 8, 10, 8);
+    layout->setSpacing(8);
+
+    // ── Color buttons ──────────────────────────────────────────────────────
+    struct ColorDef { const char* hex; QColor color; };
+    const ColorDef colors[] = {
+        { "#ff2d2d", Qt::red   },
+        { "#2f7dff", Qt::blue  },
+        { "#ffd21f", Qt::yellow},
+        { "#2ecc71", Qt::green }
+    };
+
+    for (auto& cd : colors) {
+        auto* btn = new QPushButton(this);
+        btn->setFixedSize(26, 26);
+        btn->setStyleSheet(QString::fromLatin1(
+            "background-color: %1; border: 2px solid transparent;"
+            "border-radius: 13px;").arg(QLatin1String(cd.hex)));
+        const QColor c = cd.color;
+        connect(btn, &QPushButton::clicked, this, [this, btn, c]() {
+            highlightColorButton(btn);
+            m_eraserOn = false;
+            if (m_eraserButton)
+                m_eraserButton->setText(QStringLiteral("✏️"));
+            emit colorSelected(c);
+            emit eraserToggled(false);
+        });
+        layout->addWidget(btn);
+        m_colorButtons.append(btn);
+    }
+
+    // Highlight the first (red) button by default
+    if (!m_colorButtons.isEmpty())
+        highlightColorButton(m_colorButtons.first());
+
+    // ── Width slider ───────────────────────────────────────────────────────
+    auto* widthSlider = new QSlider(Qt::Horizontal, this);
+    widthSlider->setRange(1, 20);
+    widthSlider->setValue(3);
+    widthSlider->setFixedWidth(110);
+    widthSlider->setToolTip(QStringLiteral("笔宽"));
+    connect(widthSlider, &QSlider::valueChanged, this, [this](int v) {
+        emit widthChanged(static_cast<float>(v));
+    });
+    layout->addWidget(widthSlider);
+
+    // ── Separator ──────────────────────────────────────────────────────────
+    auto* sep = new QLabel(QStringLiteral("|"), this);
+    sep->setStyleSheet(QStringLiteral("color: rgba(255,255,255,80);"));
+    layout->addWidget(sep);
+
+    // ── Eraser toggle ──────────────────────────────────────────────────────
+    m_eraserButton = new QPushButton(QStringLiteral("✏️"), this);
+    m_eraserButton->setFixedSize(34, 28);
+    m_eraserButton->setToolTip(QStringLiteral("画笔 / 橡皮擦"));
+    connect(m_eraserButton, &QPushButton::clicked, this, [this]() {
+        m_eraserOn = !m_eraserOn;
+        m_eraserButton->setText(m_eraserOn ? QStringLiteral("🧹") : QStringLiteral("✏️"));
+        if (!m_eraserOn && !m_colorButtons.isEmpty()) {
+            // re-highlight previously selected (first) color to give visual feedback
+        }
+        emit eraserToggled(m_eraserOn);
+    });
+    layout->addWidget(m_eraserButton);
+
+    // ── Undo / Redo ────────────────────────────────────────────────────────
+    auto* undoBtn = new QPushButton(QStringLiteral("↩"), this);
+    undoBtn->setFixedSize(28, 28);
+    undoBtn->setToolTip(QStringLiteral("撤销 (Ctrl+Z)"));
+    connect(undoBtn, &QPushButton::clicked, this, &FloatingToolbar::undoRequested);
+    layout->addWidget(undoBtn);
+
+    auto* redoBtn = new QPushButton(QStringLiteral("↪"), this);
+    redoBtn->setFixedSize(28, 28);
+    redoBtn->setToolTip(QStringLiteral("重做 (Ctrl+Shift+Z)"));
+    connect(redoBtn, &QPushButton::clicked, this, &FloatingToolbar::redoRequested);
+    layout->addWidget(redoBtn);
+
+    // ── Clear ──────────────────────────────────────────────────────────────
+    auto* clearBtn = new QPushButton(QStringLiteral("清空"), this);
+    clearBtn->setToolTip(QStringLiteral("清空 (C)"));
+    connect(clearBtn, &QPushButton::clicked, this, &FloatingToolbar::clearRequested);
+    layout->addWidget(clearBtn);
+
+    // ── Exit ───────────────────────────────────────────────────────────────
+    auto* exitBtn = new QPushButton(QStringLiteral("退出"), this);
+    exitBtn->setToolTip(QStringLiteral("退出 (Esc)"));
+    connect(exitBtn, &QPushButton::clicked, this, &FloatingToolbar::exitRequested);
+    layout->addWidget(exitBtn);
+
+    adjustSize();
+}
+
+void FloatingToolbar::highlightColorButton(QPushButton* selected)
+{
+    for (QPushButton* btn : m_colorButtons) {
+        QString s = btn->styleSheet();
+        if (btn == selected) {
+            s.replace(QStringLiteral("border: 2px solid transparent"),
+                      QStringLiteral("border: 2px solid white"));
+        } else {
+            s.replace(QStringLiteral("border: 2px solid white"),
+                      QStringLiteral("border: 2px solid transparent"));
+        }
+        btn->setStyleSheet(s);
+    }
+}
+
+void FloatingToolbar::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragStart = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        m_dragging = true;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void FloatingToolbar::mouseMoveEvent(QMouseEvent* event)
+{
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPosition().toPoint() - m_dragStart);
+        emit geometryChanged();
+    }
+    QWidget::mouseMoveEvent(event);
+}
+
+void FloatingToolbar::mouseReleaseEvent(QMouseEvent* event)
+{
+    m_dragging = false;
+    QWidget::mouseReleaseEvent(event);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AnnotationWindow
+// ══════════════════════════════════════════════════════════════════════════════
 
 AnnotationWindow::AnnotationWindow(QWidget* parent)
     : QWidget(parent)
@@ -14,74 +206,96 @@ AnnotationWindow::AnnotationWindow(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
 
+    // ── Overlay ───────────────────────────────────────────────────────────
     m_overlay = new AnnotationOverlay(this);
-    m_overlay->setGeometry(rect());
-    m_overlay->raise();
-
-    auto* toolbarWidget = new QWidget(this);
-    toolbarWidget->setStyleSheet("background: rgba(30,30,30,180); border-radius: 8px;");
-    toolbarWidget->move(20, 20);
-
-    auto* toolbarLayout = new QHBoxLayout(toolbarWidget);
-    toolbarLayout->setContentsMargins(10, 10, 10, 10);
-    toolbarLayout->setSpacing(8);
-
-    auto makeColorButton = [toolbarWidget](const QString& colorStyle) {
-        auto* button = new QPushButton(toolbarWidget);
-        button->setFixedSize(24, 24);
-        button->setStyleSheet(QString("background-color: %1; border: 1px solid #dddddd; border-radius: 12px;")
-                                  .arg(colorStyle));
-        return button;
-    };
-
-    auto* redButton = makeColorButton("#ff2d2d");
-    auto* blueButton = makeColorButton("#2f7dff");
-    auto* yellowButton = makeColorButton("#ffd21f");
-    auto* greenButton = makeColorButton("#2ecc71");
-
-    auto* widthSlider = new QSlider(Qt::Horizontal, toolbarWidget);
-    widthSlider->setRange(1, 10);
-    widthSlider->setValue(3);
-    widthSlider->setFixedWidth(120);
-
-    auto* clearButton = new QPushButton(QStringLiteral("清除"), toolbarWidget);
-    auto* exitButton = new QPushButton(QStringLiteral("退出"), toolbarWidget);
-
-    toolbarLayout->addWidget(redButton);
-    toolbarLayout->addWidget(blueButton);
-    toolbarLayout->addWidget(yellowButton);
-    toolbarLayout->addWidget(greenButton);
-    toolbarLayout->addWidget(widthSlider);
-    toolbarLayout->addWidget(clearButton);
-    toolbarLayout->addWidget(exitButton);
-
-    connect(redButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::red); });
-    connect(blueButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::blue); });
-    connect(yellowButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::yellow); });
-    connect(greenButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::green); });
-    connect(widthSlider, &QSlider::valueChanged, this, [this](int value) { m_overlay->setPenWidth(value); });
-    connect(clearButton, &QPushButton::clicked, m_overlay, &AnnotationOverlay::clearAll);
-    connect(exitButton, &QPushButton::clicked, this, [this]() {
-        emit closed();
-        close();
-    });
-    connect(m_overlay, &AnnotationOverlay::strokeFinished, this, [](const Stroke& stroke) {
-        qDebug() << "[strokeFinished] points:" << stroke.points.size();
-    });
 
     showFullScreen();
 
     m_overlay->setGeometry(rect());
     m_overlay->raise();
-    toolbarWidget->raise();
+
+    // ── Floating toolbar (independent top-level window) ───────────────────
+    auto* toolbar = new FloatingToolbar(nullptr);
+    m_toolbar = toolbar;
+    toolbar->move(screen() ? screen()->availableGeometry().topLeft() + QPoint(20, 20) : QPoint(20, 20));
+    toolbar->show();
+
+    // Update the exclude rect so overlay ignores the toolbar area
+    auto updateExclude = [this, toolbar]() {
+        // Translate toolbar global pos to overlay's local coordinate space
+        QRect globalRect = toolbar->geometry();
+        QPoint overlayGlobal = m_overlay->mapToGlobal(QPoint(0, 0));
+        QRect localRect = globalRect.translated(-overlayGlobal);
+        m_overlay->setToolbarExcludeRect(localRect);
+    };
+    updateExclude();
+    connect(toolbar, &FloatingToolbar::geometryChanged, this, updateExclude);
+
+    // ── Wire toolbar signals to overlay slots ─────────────────────────────
+    connect(toolbar, &FloatingToolbar::colorSelected,
+            m_overlay, &AnnotationOverlay::setPenColor);
+    connect(toolbar, &FloatingToolbar::widthChanged,
+            m_overlay, &AnnotationOverlay::setPenWidth);
+    connect(toolbar, &FloatingToolbar::eraserToggled,
+            m_overlay, &AnnotationOverlay::setEraserMode);
+    connect(toolbar, &FloatingToolbar::undoRequested,
+            m_overlay, &AnnotationOverlay::undo);
+    connect(toolbar, &FloatingToolbar::redoRequested,
+            m_overlay, &AnnotationOverlay::redo);
+    connect(toolbar, &FloatingToolbar::clearRequested,
+            m_overlay, &AnnotationOverlay::clearAll);
+    connect(toolbar, &FloatingToolbar::exitRequested, this, [this]() {
+        emit closed();
+        close();
+    });
+
+    // ── Forward stroke packets to the network layer ───────────────────────
+    connect(m_overlay, &AnnotationOverlay::strokePacketReady,
+            this, &AnnotationWindow::strokePacketReady);
+
+    // Debug / legacy
+    connect(m_overlay, &AnnotationOverlay::strokeFinished, this, [](const Stroke& s) {
+        qDebug() << "[strokeFinished] points:" << s.points.size();
+    });
 }
 
 void AnnotationWindow::keyPressEvent(QKeyEvent* event)
 {
+    const Qt::KeyboardModifiers mods = event->modifiers();
+
     if (event->key() == Qt::Key_Escape) {
         emit closed();
         close();
         return;
     }
+    if (mods & Qt::ControlModifier) {
+        if (event->key() == Qt::Key_Z) {
+            if (mods & Qt::ShiftModifier)
+                m_overlay->redo();
+            else
+                m_overlay->undo();
+            return;
+        }
+        if (event->key() == Qt::Key_Y) {
+            m_overlay->redo();
+            return;
+        }
+    }
+    if (!(mods & Qt::ControlModifier)) {
+        if (event->key() == Qt::Key_E) {
+            // Toggle eraser – delegate to toolbar so its button state stays in sync
+            if (auto* tb = qobject_cast<FloatingToolbar*>(m_toolbar))
+                emit tb->eraserToggled(!m_overlay->property("eraserActive").toBool());
+            else
+                m_overlay->setEraserMode(true);
+            return;
+        }
+        if (event->key() == Qt::Key_C) {
+            m_overlay->clearAll();
+            return;
+        }
+    }
     QWidget::keyPressEvent(event);
 }
+
+#include "annotationwindow.moc"
