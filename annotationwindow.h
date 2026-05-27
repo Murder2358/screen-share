@@ -3,7 +3,6 @@
 #include "annotationoverlay.h"
 
 class QKeyEvent;
-class QToolBar;
 
 class AnnotationWindow : public QWidget
 {
@@ -13,10 +12,12 @@ public:
 
 signals:
     void closed();
+    void strokePacketReady(const StrokePacket& pkt);
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
     AnnotationOverlay* m_overlay = nullptr;
+    QWidget*           m_toolbar = nullptr;
 };
