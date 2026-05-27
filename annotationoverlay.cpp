@@ -253,7 +253,7 @@ void AnnotationOverlay::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), Qt::transparent);
+    painter.fillRect(rect(), QColor(0, 0, 0, 1));
 
     if (!m_cachedPixmap.isNull())
         painter.drawPixmap(0, 0, m_cachedPixmap);

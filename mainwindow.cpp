@@ -7,7 +7,6 @@ MainWindow::MainWindow(QWidget* parent)
 {
     auto* w = new AnnotationWindow();
     w->show();
-    hide();
 }
 
 MainWindow::~MainWindow() {}

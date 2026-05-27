@@ -1,10 +1,10 @@
 #include <QApplication>
-#include "mainwindow.h"
+#include "annotationwindow.h"
 
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
-    MainWindow w;
+    AnnotationWindow w;
     w.show();
     return app.exec();
 }
