@@ -1,0 +1,3 @@
+D:\QT\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\ByteDanceTest.dir/objects.a
+D:\QT\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\ByteDanceTest.dir/objects.a @CMakeFiles\ByteDanceTest.dir\objects1.rsp
+D:\QT\Tools\mingw1310_64\bin\c++.exe -g -mwindows -Wl,--whole-archive CMakeFiles\ByteDanceTest.dir/objects.a -Wl,--no-whole-archive -o ByteDanceTest.exe -Wl,--out-implib,libByteDanceTest.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\ByteDanceTest.dir\linkLibs.rsp
