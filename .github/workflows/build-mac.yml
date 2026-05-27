@@ -1,4 +1,4 @@
-name: Build macOS
+name: Build
 
 on:
   push:
@@ -15,11 +15,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clean build directory
+        run: rm -rf build
+
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.10.3'
-          modules: 'qtwebsockets'
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -43,6 +45,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Clean build directory
+        run: Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v4

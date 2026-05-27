@@ -1,7 +1,0 @@
-# Hashes of file build rules.
-b84e86150f45a3d075a66162f9c8030e .qt/rcc/qrc_ByteDanceTest_translations.cpp
-ee844db4a298baab90652a9bdbfe6d20 ByteDanceTest_autogen/timestamp
-20f3d21c4862a66290479ef5573641f6 ByteDanceTest_zh_CN.qm
-8c6e658695dbbff46338c054832882aa CMakeFiles/ByteDanceTest_autogen
-8c6e658695dbbff46338c054832882aa CMakeFiles/ByteDanceTest_lrelease
-89b89ca66d306137ca5236ed01622107 CMakeFiles/ByteDanceTest_lupdate
