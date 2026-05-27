@@ -32,6 +32,7 @@ AnnotationOverlay::AnnotationOverlay(QWidget* parent)
     setAttribute(Qt::WA_TransparentForMouseEvents, false);
     setAttribute(Qt::WA_NoSystemBackground, true);
     setAttribute(Qt::WA_TranslucentBackground, true);
+    setStyleSheet("background: transparent;");
     setMouseTracking(true);
 }
 
@@ -67,6 +68,7 @@ void AnnotationOverlay::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.fillRect(rect(), Qt::transparent);
 
     for (const Stroke& stroke : m_strokes) {
         drawStroke(painter, stroke);
