@@ -47,12 +47,8 @@ private:
 };
 
 FloatingToolbar::FloatingToolbar(QWidget* parent)
-    : QWidget(parent,
-              Qt::Tool
-              | Qt::FramelessWindowHint
-              | Qt::WindowStaysOnTopHint)
+    : QWidget(parent)
 {
-    setAttribute(Qt::WA_TranslucentBackground, true);
     setStyleSheet(QStringLiteral(
         "QWidget#FloatingToolbar { background: rgba(30,30,30,200); border-radius: 10px; }"
         "QPushButton { color: white; background: rgba(60,60,60,220); border: none;"
@@ -174,7 +170,7 @@ void FloatingToolbar::highlightColorButton(QPushButton* selected)
 void FloatingToolbar::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        m_dragStart = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        m_dragStart = event->pos();
         m_dragging = true;
     }
     QWidget::mousePressEvent(event);
@@ -183,7 +179,8 @@ void FloatingToolbar::mousePressEvent(QMouseEvent* event)
 void FloatingToolbar::mouseMoveEvent(QMouseEvent* event)
 {
     if (m_dragging && (event->buttons() & Qt::LeftButton)) {
-        move(event->globalPosition().toPoint() - m_dragStart);
+        QPoint newPos = mapToParent(event->pos()) - m_dragStart;
+        move(newPos);
         emit geometryChanged();
     }
     QWidget::mouseMoveEvent(event);
@@ -202,7 +199,7 @@ void FloatingToolbar::mouseReleaseEvent(QMouseEvent* event)
 AnnotationWindow::AnnotationWindow(QWidget* parent)
     : QWidget(parent)
 {
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
 
@@ -214,19 +211,17 @@ AnnotationWindow::AnnotationWindow(QWidget* parent)
     m_overlay->setGeometry(rect());
     m_overlay->raise();
 
-    // ── Floating toolbar (independent top-level window) ───────────────────
-    auto* toolbar = new FloatingToolbar(nullptr);
+    // ── Floating toolbar (child widget, rendered inside AnnotationWindow) ─────
+    auto* toolbar = new FloatingToolbar(this);
     m_toolbar = toolbar;
-    toolbar->move(screen() ? screen()->availableGeometry().topLeft() + QPoint(20, 20) : QPoint(20, 20));
+    toolbar->move(20, 20);
     toolbar->show();
+    toolbar->raise();
 
     // Update the exclude rect so overlay ignores the toolbar area
     auto updateExclude = [this, toolbar]() {
-        // Translate toolbar global pos to overlay's local coordinate space
-        QRect globalRect = toolbar->geometry();
-        QPoint overlayGlobal = m_overlay->mapToGlobal(QPoint(0, 0));
-        QRect localRect = globalRect.translated(-overlayGlobal);
-        m_overlay->setToolbarExcludeRect(localRect);
+        // Both toolbar and overlay are children of this; use toolbar->geometry() directly
+        m_overlay->setToolbarExcludeRect(toolbar->geometry());
     };
     updateExclude();
     connect(toolbar, &FloatingToolbar::geometryChanged, this, updateExclude);
