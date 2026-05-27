@@ -1,70 +1,87 @@
 #include "annotationwindow.h"
 
-#include <QAction>
 #include <QDebug>
-#include <QGuiApplication>
-#include <QLabel>
-#include <QPixmap>
-#include <QScreen>
+#include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QPushButton>
 #include <QSlider>
-#include <QStackedLayout>
-#include <QToolBar>
 #include <QWidget>
 
 AnnotationWindow::AnnotationWindow(QWidget* parent)
-    : QMainWindow(parent)
+    : QWidget(parent)
 {
-    setWindowTitle("Annotation 测试窗口");
-    resize(1280, 720);
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    setAttribute(Qt::WA_TranslucentBackground, true);
+    setAttribute(Qt::WA_NoSystemBackground, true);
 
-    QPixmap screenshot;
-    if (QScreen* screen = QGuiApplication::primaryScreen()) {
-        screenshot = screen->grabWindow(0);
-    }
+    m_overlay = new AnnotationOverlay(this);
+    m_overlay->setGeometry(rect());
+    m_overlay->raise();
 
-    auto* container = new QWidget(this);
-    auto* stackedLayout = new QStackedLayout(container);
-    stackedLayout->setStackingMode(QStackedLayout::StackAll);
-    stackedLayout->setContentsMargins(0, 0, 0, 0);
+    auto* toolbarWidget = new QWidget(this);
+    toolbarWidget->setStyleSheet("background: rgba(30,30,30,180); border-radius: 8px;");
+    toolbarWidget->move(20, 20);
 
-    auto* backgroundLabel = new QLabel(container);
-    backgroundLabel->setAlignment(Qt::AlignCenter);
-    backgroundLabel->setScaledContents(true);
-    backgroundLabel->setPixmap(screenshot);
+    auto* toolbarLayout = new QHBoxLayout(toolbarWidget);
+    toolbarLayout->setContentsMargins(10, 10, 10, 10);
+    toolbarLayout->setSpacing(8);
 
-    auto* overlay = new AnnotationOverlay(container);
+    auto makeColorButton = [toolbarWidget](const QString& colorStyle) {
+        auto* button = new QPushButton(toolbarWidget);
+        button->setFixedSize(24, 24);
+        button->setStyleSheet(QString("background-color: %1; border: 1px solid #dddddd; border-radius: 12px;")
+                                  .arg(colorStyle));
+        return button;
+    };
 
-    stackedLayout->addWidget(backgroundLabel);
-    stackedLayout->addWidget(overlay);
-    setCentralWidget(container);
+    auto* redButton = makeColorButton("#ff2d2d");
+    auto* blueButton = makeColorButton("#2f7dff");
+    auto* yellowButton = makeColorButton("#ffd21f");
+    auto* greenButton = makeColorButton("#2ecc71");
 
-    QToolBar* toolbar = addToolBar("Annotation Tools");
-    QAction* redAction = toolbar->addAction("红");
-    QAction* blueAction = toolbar->addAction("蓝");
-    QAction* yellowAction = toolbar->addAction("黄");
-
-    auto* widthSlider = new QSlider(Qt::Horizontal, toolbar);
+    auto* widthSlider = new QSlider(Qt::Horizontal, toolbarWidget);
     widthSlider->setRange(1, 10);
     widthSlider->setValue(3);
-    toolbar->addWidget(widthSlider);
+    widthSlider->setFixedWidth(120);
 
-    QAction* clearAction = toolbar->addAction("清除");
+    auto* clearButton = new QPushButton(QStringLiteral("清除"), toolbarWidget);
+    auto* exitButton = new QPushButton(QStringLiteral("退出"), toolbarWidget);
 
-    connect(redAction, &QAction::triggered, this, [overlay]() {
-        overlay->setPenColor(Qt::red);
-    });
-    connect(blueAction, &QAction::triggered, this, [overlay]() {
-        overlay->setPenColor(Qt::blue);
-    });
-    connect(yellowAction, &QAction::triggered, this, [overlay]() {
-        overlay->setPenColor(Qt::yellow);
-    });
-    connect(widthSlider, &QSlider::valueChanged, this, [overlay](int value) {
-        overlay->setPenWidth(value);
-    });
-    connect(clearAction, &QAction::triggered, overlay, &AnnotationOverlay::clearAll);
+    toolbarLayout->addWidget(redButton);
+    toolbarLayout->addWidget(blueButton);
+    toolbarLayout->addWidget(yellowButton);
+    toolbarLayout->addWidget(greenButton);
+    toolbarLayout->addWidget(widthSlider);
+    toolbarLayout->addWidget(clearButton);
+    toolbarLayout->addWidget(exitButton);
 
-    connect(overlay, &AnnotationOverlay::strokeFinished, this, [](const Stroke& stroke) {
-        qDebug() << "[Annotation] stroke points:" << stroke.points.size();
+    connect(redButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::red); });
+    connect(blueButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::blue); });
+    connect(yellowButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::yellow); });
+    connect(greenButton, &QPushButton::clicked, this, [this]() { m_overlay->setPenColor(Qt::green); });
+    connect(widthSlider, &QSlider::valueChanged, this, [this](int value) { m_overlay->setPenWidth(value); });
+    connect(clearButton, &QPushButton::clicked, m_overlay, &AnnotationOverlay::clearAll);
+    connect(exitButton, &QPushButton::clicked, this, [this]() {
+        emit closed();
+        close();
     });
+    connect(m_overlay, &AnnotationOverlay::strokeFinished, this, [](const Stroke& stroke) {
+        qDebug() << "[strokeFinished] points:" << stroke.points.size();
+    });
+
+    showFullScreen();
+
+    m_overlay->setGeometry(rect());
+    m_overlay->raise();
+    toolbarWidget->raise();
+}
+
+void AnnotationWindow::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        emit closed();
+        close();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
