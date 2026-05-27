@@ -14,7 +14,7 @@
 ## 项目结构
 
 ```
-ByteDanceTest/
+screen-share/
 ├── main.cpp                  # 程序入口
 ├── mainwindow.h/.cpp         # 主窗口，管理页面导航
 ├── pages/
@@ -85,10 +85,10 @@ cmake --build build
 cmake --build build
 
 # 3. 部署依赖 DLL（首次构建后执行，让 exe 可双击运行）
-windeployqt build/ByteDanceTest.exe
+windeployqt build/screenShare.exe
 
 # 4. 运行
-./build/ByteDanceTest.exe
+./build/screenShare.exe
 ```
 
 ### 方式二：命令行构建（macOS）
@@ -99,10 +99,10 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 # 2. 打包为 .app（可选）
-macdeployqt build/ByteDanceTest.app
+macdeployqt build/screenShare.app
 
 # 3. 运行
-open build/ByteDanceTest.app
+open build/screenShare.app
 ```
 
 ### 方式三：Qt Creator

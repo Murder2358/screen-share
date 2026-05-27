@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 方式一：命令行构建
 
-在项目根目录 `D:\QTCode\ByteDanceTest` 下打开终端，执行：
+在项目根目录 `D:\QTCode\screen-share` 下打开终端，执行：
 
 ```bash
 # 0. 设置环境变量（每次开新终端都需要执行）
@@ -31,10 +31,10 @@ cmake --build build
 cmake --build build
 
 # 3. 部署 DLL（首次构建或 Qt 版本变更后需要执行，让 exe 可双击运行）
-windeployqt build/ByteDanceTest.exe
+windeployqt build/screenShare.exe
 
 # 4. 运行
-./build/ByteDanceTest.exe
+./build/screenShare.exe
 ```
 
 ### 方式二：Qt Creator

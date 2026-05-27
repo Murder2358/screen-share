@@ -30,13 +30,18 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Deploy macOS app bundle
-        run: macdeployqt build/ByteDanceTest.app -verbose=2
+        run: macdeployqt build/screenShare.app -verbose=2
+
+      - name: Package as zip
+        run: |
+          cd build
+          zip -r ../screenShare-macOS.zip screenShare.app
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ByteDanceTest-macOS
-          path: build/ByteDanceTest.app
+          name: screenShare-macOS
+          path: screenShare-macOS.zip
           retention-days: 30
 
   build-windows:
@@ -64,8 +69,8 @@ jobs:
         id: find_exe
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path build -Recurse -Filter "ByteDanceTest.exe" | Select-Object -First 1
-          if (-not $exe) { Write-Error "ByteDanceTest.exe not found"; exit 1 }
+          $exe = Get-ChildItem -Path build -Recurse -Filter "screenShare.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "screenShare.exe not found"; exit 1 }
           echo "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
           echo "exe_dir=$($exe.DirectoryName)" >> $env:GITHUB_OUTPUT
           Write-Host "Found exe: $($exe.FullName)"
@@ -76,6 +81,6 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ByteDanceTest-Windows
+          name: screenShare-Windows
           path: ${{ steps.find_exe.outputs.exe_dir }}/**
           retention-days: 30

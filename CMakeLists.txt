@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.19)
-project(ByteDanceTest LANGUAGES CXX)
+project(screenShare LANGUAGES CXX)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network LinguistTools)
 
 qt_standard_project_setup()
 
-qt_add_executable(ByteDanceTest
+qt_add_executable(screenShare
     WIN32 MACOSX_BUNDLE
     main.cpp
     mainwindow.cpp
@@ -27,32 +27,32 @@ qt_add_executable(ByteDanceTest
 )
 
 qt_add_translations(
-    TARGETS ByteDanceTest
-    TS_FILES ByteDanceTest_zh_CN.ts
+    TARGETS screenShare
+    TS_FILES screenShare_zh_CN.ts
 )
 
-target_include_directories(ByteDanceTest PRIVATE
+target_include_directories(screenShare PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/pages
     ${CMAKE_CURRENT_SOURCE_DIR}/widgets
     ${CMAKE_CURRENT_SOURCE_DIR}/network
 )
 
-target_link_libraries(ByteDanceTest
+target_link_libraries(screenShare
     PRIVATE
         Qt::Core
         Qt::Widgets
         Qt::Network
 )
 
-install(TARGETS ByteDanceTest
+install(TARGETS screenShare
     BUNDLE  DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 qt_generate_deploy_app_script(
-    TARGET ByteDanceTest
+    TARGET screenShare
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
