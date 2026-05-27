@@ -12,6 +12,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
 set(SOURCES
     main.cpp
     mainwindow.cpp
+    annotationoverlay.cpp
+    annotationwindow.cpp
     screencapturer.cpp
     audiocapturer.cpp
     audioplayer.cpp
@@ -19,6 +21,8 @@ set(SOURCES
 
 set(HEADERS
     mainwindow.h
+    annotationoverlay.h
+    annotationwindow.h
     screencapturer.h
     audiocapturer.h
     audioplayer.h
