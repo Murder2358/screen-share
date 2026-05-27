@@ -55,17 +55,27 @@ jobs:
           version: '6.10.3'
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build
 
       - name: Build
         run: cmake --build build --config Release
 
+      - name: Find exe location
+        id: find_exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter "ByteDanceTest.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "ByteDanceTest.exe not found"; exit 1 }
+          echo "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "exe_dir=$($exe.DirectoryName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Found exe: $($exe.FullName)"
+
       - name: Deploy Windows executable
-        run: windeployqt build/ByteDanceTest.exe --release
+        run: windeployqt "${{ steps.find_exe.outputs.exe_path }}" --release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: ByteDanceTest-Windows
-          path: build/ByteDanceTest.exe
+          path: ${{ steps.find_exe.outputs.exe_dir }}/**
           retention-days: 30
