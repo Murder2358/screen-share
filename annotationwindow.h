@@ -13,6 +13,7 @@ public:
 signals:
     void closed();
     void strokePacketReady(const StrokePacket& pkt);
+    void textAnnotationCreated(const TextAnnotation& text);
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;

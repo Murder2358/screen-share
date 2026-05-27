@@ -1,5 +1,6 @@
 #include "annotationwindow.h"
 
+#include <QComboBox>
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -19,11 +20,15 @@ class FloatingToolbar : public QWidget
 public:
     explicit FloatingToolbar(QWidget* parent = nullptr);
 
+    void toggleTextMode();
+
     // Emits when any state changes that the overlay needs to react to
 signals:
     void colorSelected(const QColor& color);
     void widthChanged(float width);
     void eraserToggled(bool on);
+    void textModeChanged(bool on);
+    void fontSizeChanged(int pointSize);
     void undoRequested();
     void redoRequested();
     void clearRequested();
@@ -39,11 +44,14 @@ private:
     QPoint  m_dragStart;
     bool    m_dragging = false;
     bool    m_eraserOn = false;
+    bool    m_textOn   = false;
     QPushButton* m_eraserButton = nullptr;
+    QPushButton* m_textButton   = nullptr;
 
     // Helper to mark which color button is "active"
     QList<QPushButton*> m_colorButtons;
     void highlightColorButton(QPushButton* selected);
+    void setTextButtonHighlight(bool on);
 };
 
 FloatingToolbar::FloatingToolbar(QWidget* parent)
@@ -55,6 +63,10 @@ FloatingToolbar::FloatingToolbar(QWidget* parent)
         "              border-radius: 6px; padding: 4px 8px; font-size: 14px; }"
         "QPushButton:hover { background: rgba(90,90,90,220); }"
         "QPushButton:pressed { background: rgba(40,40,40,220); }"
+        "QComboBox { color: white; background: rgba(60,60,60,220); border: none;"
+        "            border-radius: 6px; padding: 3px 6px; font-size: 13px; }"
+        "QComboBox::drop-down { border: none; }"
+        "QComboBox QAbstractItemView { background: rgba(40,40,40,240); color: white; }"
     ));
     setObjectName(QStringLiteral("FloatingToolbar"));
 
@@ -80,11 +92,15 @@ FloatingToolbar::FloatingToolbar(QWidget* parent)
         const QColor c = cd.color;
         connect(btn, &QPushButton::clicked, this, [this, btn, c]() {
             highlightColorButton(btn);
+            // Selecting a color switches off eraser and text modes
             m_eraserOn = false;
+            m_textOn   = false;
             if (m_eraserButton)
                 m_eraserButton->setText(QStringLiteral("✏️"));
+            setTextButtonHighlight(false);
             emit colorSelected(c);
             emit eraserToggled(false);
+            emit textModeChanged(false);
         });
         layout->addWidget(btn);
         m_colorButtons.append(btn);
@@ -117,12 +133,46 @@ FloatingToolbar::FloatingToolbar(QWidget* parent)
     connect(m_eraserButton, &QPushButton::clicked, this, [this]() {
         m_eraserOn = !m_eraserOn;
         m_eraserButton->setText(m_eraserOn ? QStringLiteral("🧹") : QStringLiteral("✏️"));
-        if (!m_eraserOn && !m_colorButtons.isEmpty()) {
-            // re-highlight previously selected (first) color to give visual feedback
+        if (m_eraserOn) {
+            // Turn off text mode when eraser is activated
+            m_textOn = false;
+            setTextButtonHighlight(false);
+            emit textModeChanged(false);
         }
         emit eraserToggled(m_eraserOn);
     });
     layout->addWidget(m_eraserButton);
+
+    // ── Text (T) tool ──────────────────────────────────────────────────────
+    m_textButton = new QPushButton(QStringLiteral("T"), this);
+    m_textButton->setFixedSize(28, 28);
+    m_textButton->setToolTip(QStringLiteral("文字标注 (T)"));
+    connect(m_textButton, &QPushButton::clicked, this, [this]() {
+        m_textOn = !m_textOn;
+        setTextButtonHighlight(m_textOn);
+        if (m_textOn) {
+            // Turn off eraser when text mode is activated
+            m_eraserOn = false;
+            if (m_eraserButton)
+                m_eraserButton->setText(QStringLiteral("✏️"));
+            emit eraserToggled(false);
+        }
+        emit textModeChanged(m_textOn);
+    });
+    layout->addWidget(m_textButton);
+
+    // ── Font size combo ────────────────────────────────────────────────────
+    auto* fontCombo = new QComboBox(this);
+    fontCombo->addItem(QStringLiteral("12"), 12);
+    fontCombo->addItem(QStringLiteral("16"), 16);
+    fontCombo->addItem(QStringLiteral("20"), 20);
+    fontCombo->setCurrentIndex(1);  // default 16
+    fontCombo->setFixedWidth(52);
+    fontCombo->setToolTip(QStringLiteral("字号 (pt)"));
+    connect(fontCombo, &QComboBox::currentIndexChanged, this, [this, fontCombo](int idx) {
+        emit fontSizeChanged(fontCombo->itemData(idx).toInt());
+    });
+    layout->addWidget(fontCombo);
 
     // ── Undo / Redo ────────────────────────────────────────────────────────
     auto* undoBtn = new QPushButton(QStringLiteral("↩"), this);
@@ -152,6 +202,12 @@ FloatingToolbar::FloatingToolbar(QWidget* parent)
     adjustSize();
 }
 
+void FloatingToolbar::toggleTextMode()
+{
+    // Programmatically simulate the T button click
+    m_textButton->click();
+}
+
 void FloatingToolbar::highlightColorButton(QPushButton* selected)
 {
     for (QPushButton* btn : m_colorButtons) {
@@ -164,6 +220,18 @@ void FloatingToolbar::highlightColorButton(QPushButton* selected)
                       QStringLiteral("border: 2px solid transparent"));
         }
         btn->setStyleSheet(s);
+    }
+}
+
+void FloatingToolbar::setTextButtonHighlight(bool on)
+{
+    if (!m_textButton) return;
+    if (on) {
+        m_textButton->setStyleSheet(
+            QStringLiteral("background: rgba(255,255,255,60); border: 1px solid white;"
+                           " border-radius: 6px; color: white; font-size: 14px; font-weight: bold;"));
+    } else {
+        m_textButton->setStyleSheet(QString()); // revert to global stylesheet
     }
 }
 
@@ -233,6 +301,10 @@ AnnotationWindow::AnnotationWindow(QWidget* parent)
             m_overlay, &AnnotationOverlay::setPenWidth);
     connect(toolbar, &FloatingToolbar::eraserToggled,
             m_overlay, &AnnotationOverlay::setEraserMode);
+    connect(toolbar, &FloatingToolbar::textModeChanged,
+            m_overlay, &AnnotationOverlay::setTextMode);
+    connect(toolbar, &FloatingToolbar::fontSizeChanged,
+            m_overlay, &AnnotationOverlay::setFontSize);
     connect(toolbar, &FloatingToolbar::undoRequested,
             m_overlay, &AnnotationOverlay::undo);
     connect(toolbar, &FloatingToolbar::redoRequested,
@@ -244,9 +316,11 @@ AnnotationWindow::AnnotationWindow(QWidget* parent)
         close();
     });
 
-    // ── Forward stroke packets to the network layer ───────────────────────
+    // ── Forward stroke/text packets to the network layer ─────────────────
     connect(m_overlay, &AnnotationOverlay::strokePacketReady,
             this, &AnnotationWindow::strokePacketReady);
+    connect(m_overlay, &AnnotationOverlay::textAnnotationCreated,
+            this, &AnnotationWindow::textAnnotationCreated);
 
     // Debug / legacy
     connect(m_overlay, &AnnotationOverlay::strokeFinished, this, [](const Stroke& s) {
@@ -259,6 +333,11 @@ void AnnotationWindow::keyPressEvent(QKeyEvent* event)
     const Qt::KeyboardModifiers mods = event->modifiers();
 
     if (event->key() == Qt::Key_Escape) {
+        // If a text editor is active, Esc cancels input rather than closing the window
+        if (m_overlay->isEditingText()) {
+            m_overlay->cancelTextInput();
+            return;
+        }
         emit closed();
         close();
         return;
@@ -277,6 +356,12 @@ void AnnotationWindow::keyPressEvent(QKeyEvent* event)
         }
     }
     if (!(mods & Qt::ControlModifier)) {
+        if (event->key() == Qt::Key_T) {
+            // Toggle text tool via toolbar so button state stays in sync
+            if (auto* tb = qobject_cast<FloatingToolbar*>(m_toolbar))
+                tb->toggleTextMode();
+            return;
+        }
         if (event->key() == Qt::Key_E) {
             // Toggle eraser – delegate to toolbar so its button state stays in sync
             if (auto* tb = qobject_cast<FloatingToolbar*>(m_toolbar))

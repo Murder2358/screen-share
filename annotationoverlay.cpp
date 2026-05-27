@@ -1,5 +1,9 @@
 #include "annotationoverlay.h"
 
+#include <QEvent>
+#include <QFocusEvent>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -100,6 +104,27 @@ void AnnotationOverlay::rebuildCache()
 }
 
 // ──────────────────────────────────────────────
+// Draw a single text annotation
+// ──────────────────────────────────────────────
+
+void AnnotationOverlay::drawTextAnnotation(QPainter& painter, const TextAnnotation& item)
+{
+    QFont font = painter.font();
+    font.setPointSize(item.fontSize);
+    painter.setFont(font);
+
+    QFontMetrics fm(font);
+
+    // Subtle shadow for readability on transparent overlay
+    painter.setPen(QColor(0, 0, 0, 100));
+    painter.drawText(QPointF(item.position.x() + 1, item.position.y() + fm.ascent() + 1), item.text);
+
+    // Actual text
+    painter.setPen(item.color);
+    painter.drawText(QPointF(item.position.x(), item.position.y() + fm.ascent()), item.text);
+}
+
+// ──────────────────────────────────────────────
 // Constructor
 // ──────────────────────────────────────────────
 
@@ -120,7 +145,11 @@ AnnotationOverlay::AnnotationOverlay(QWidget* parent)
 void AnnotationOverlay::setPenColor(const QColor& color)
 {
     m_penColor = color;
+    // Switching color implies pen mode (not eraser, not text)
     m_isEraser = false;
+    m_currentTool = AnnotationTool::Pen;
+    setCursor(Qt::ArrowCursor);
+    emit toolChanged(m_currentTool);
 }
 
 void AnnotationOverlay::setPenWidth(float width)
@@ -131,6 +160,27 @@ void AnnotationOverlay::setPenWidth(float width)
 void AnnotationOverlay::setEraserMode(bool on)
 {
     m_isEraser = on;
+    m_currentTool = on ? AnnotationTool::Eraser : AnnotationTool::Pen;
+    setCursor(Qt::ArrowCursor);
+    emit toolChanged(m_currentTool);
+}
+
+void AnnotationOverlay::setTextMode(bool on)
+{
+    if (on) {
+        m_currentTool = AnnotationTool::Text;
+        m_isEraser = false;
+        setCursor(Qt::IBeamCursor);
+    } else {
+        m_currentTool = AnnotationTool::Pen;
+        setCursor(Qt::ArrowCursor);
+    }
+    emit toolChanged(m_currentTool);
+}
+
+void AnnotationOverlay::setFontSize(int pointSize)
+{
+    m_fontSize = qMax(8, pointSize);
 }
 
 void AnnotationOverlay::setToolbarExcludeRect(const QRect& r)
@@ -140,8 +190,18 @@ void AnnotationOverlay::setToolbarExcludeRect(const QRect& r)
 
 void AnnotationOverlay::clearAll()
 {
+    // Cancel any pending text input first
+    if (m_textEditor) {
+        QLineEdit* ed = m_textEditor;
+        m_textEditor = nullptr;
+        ed->hide();
+        ed->deleteLater();
+    }
+
     m_strokes.clear();
-    m_undoStack.clear();
+    m_textAnnotations.clear();
+    m_undoHistory.clear();
+    m_redoHistory.clear();
     m_currentStroke.points.clear();
     m_drawing = false;
     if (!m_cachedPixmap.isNull())
@@ -156,25 +216,44 @@ void AnnotationOverlay::clearAll()
 
 void AnnotationOverlay::undo()
 {
-    if (m_strokes.isEmpty())
+    if (m_undoHistory.isEmpty())
         return;
-    m_undoStack.append(m_strokes.takeLast());
-    rebuildCache();
+
+    UndoAction action = m_undoHistory.takeLast();
+    m_redoHistory.append(action);
+
+    if (action.type == ActionType::Stroke) {
+        if (!m_strokes.isEmpty())
+            m_strokes.removeLast();
+        rebuildCache();
+
+        StrokePacket pkt;
+        pkt.type = StrokeEventType::Undo;
+        emit strokePacketReady(pkt);
+    } else {
+        if (!m_textAnnotations.isEmpty())
+            m_textAnnotations.removeLast();
+    }
+
     update();
     emit undoRedoChanged();
-
-    StrokePacket pkt;
-    pkt.type = StrokeEventType::Undo;
-    emit strokePacketReady(pkt);
 }
 
 void AnnotationOverlay::redo()
 {
-    if (m_undoStack.isEmpty())
+    if (m_redoHistory.isEmpty())
         return;
-    Stroke s = m_undoStack.takeLast();
-    renderStrokeToCache(s);
-    m_strokes.append(s);
+
+    UndoAction action = m_redoHistory.takeLast();
+    m_undoHistory.append(action);
+
+    if (action.type == ActionType::Stroke) {
+        renderStrokeToCache(action.stroke);
+        m_strokes.append(action.stroke);
+    } else {
+        m_textAnnotations.append(action.text);
+    }
+
     update();
     emit undoRedoChanged();
 }
@@ -185,7 +264,7 @@ void AnnotationOverlay::addStroke(const Stroke& stroke)
         return;
     renderStrokeToCache(stroke);
     m_strokes.append(stroke);
-    m_undoStack.clear();
+    m_redoHistory.clear();
     update();
     emit undoRedoChanged();
 }
@@ -216,7 +295,7 @@ void AnnotationOverlay::applyRemotePacket(const StrokePacket& pkt)
                 s.points.append(pkt.point);
             renderStrokeToCache(s);
             m_strokes.append(s);
-            m_undoStack.clear();
+            m_redoHistory.clear();
             update();
             emit undoRedoChanged();
             emit strokeFinished(s);
@@ -225,7 +304,7 @@ void AnnotationOverlay::applyRemotePacket(const StrokePacket& pkt)
     }
     case StrokeEventType::Undo: {
         if (!m_strokes.isEmpty()) {
-            m_undoStack.append(m_strokes.takeLast());
+            m_strokes.removeLast();
             rebuildCache();
             update();
             emit undoRedoChanged();
@@ -234,7 +313,9 @@ void AnnotationOverlay::applyRemotePacket(const StrokePacket& pkt)
     }
     case StrokeEventType::Clear: {
         m_strokes.clear();
-        m_undoStack.clear();
+        m_textAnnotations.clear();
+        m_undoHistory.clear();
+        m_redoHistory.clear();
         m_remoteStrokes.clear();
         if (!m_cachedPixmap.isNull())
             m_cachedPixmap.fill(Qt::transparent);
@@ -246,6 +327,112 @@ void AnnotationOverlay::applyRemotePacket(const StrokePacket& pkt)
 }
 
 // ──────────────────────────────────────────────
+// Text input
+// ──────────────────────────────────────────────
+
+void AnnotationOverlay::beginTextInput(const QPointF& pos)
+{
+    // Commit any existing input first
+    if (m_textEditor)
+        commitTextInput();
+
+    m_pendingTextPos = pos;
+    m_textEditor = new QLineEdit(this);
+
+    // Style to match overlay aesthetics
+    QFont font;
+    font.setPointSize(m_fontSize);
+    m_textEditor->setFont(font);
+
+    m_textEditor->setStyleSheet(
+        QString("QLineEdit { color: %1; background: rgba(0,0,0,80);"
+                " border: 1px solid rgba(255,255,255,160);"
+                " border-radius: 3px; padding: 1px 3px; }")
+            .arg(m_penColor.name()));
+    m_textEditor->setMinimumWidth(160);
+    m_textEditor->setMaximumWidth(600);
+    m_textEditor->move(pos.toPoint());
+    m_textEditor->show();
+    m_textEditor->setFocus();
+
+    // Catch Esc, Enter, and focus-loss via event filter
+    m_textEditor->installEventFilter(this);
+
+    connect(m_textEditor, &QLineEdit::returnPressed,
+            this, &AnnotationOverlay::commitTextInput);
+}
+
+void AnnotationOverlay::commitTextInput()
+{
+    if (!m_textEditor)
+        return;
+
+    QString text = m_textEditor->text().trimmed();
+    QLineEdit* ed = m_textEditor;
+    m_textEditor = nullptr;
+    ed->hide();
+    ed->deleteLater();
+
+    if (!text.isEmpty()) {
+        TextAnnotation ta;
+        ta.position = m_pendingTextPos;
+        ta.text     = text;
+        ta.color    = m_penColor;
+        ta.fontSize = m_fontSize;
+
+        m_textAnnotations.append(ta);
+        m_undoHistory.append({ActionType::Text, {}, ta});
+        m_redoHistory.clear();
+
+        emit textAnnotationCreated(ta);
+        emit undoRedoChanged();
+        update();
+    }
+}
+
+void AnnotationOverlay::cancelTextInput()
+{
+    if (!m_textEditor)
+        return;
+
+    QLineEdit* ed = m_textEditor;
+    m_textEditor = nullptr;
+    ed->hide();
+    ed->deleteLater();
+    update();
+}
+
+// ──────────────────────────────────────────────
+// Event filter (for the temporary QLineEdit)
+// ──────────────────────────────────────────────
+
+bool AnnotationOverlay::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_textEditor) {
+        if (event->type() == QEvent::KeyPress) {
+            auto* ke = static_cast<QKeyEvent*>(event);
+            if (ke->key() == Qt::Key_Escape) {
+                cancelTextInput();
+                return true; // consume the event
+            }
+            // Return/Enter is handled by the returnPressed signal connection
+        }
+        if (event->type() == QEvent::FocusOut) {
+            // Defer commit/cancel so we're outside the event delivery chain
+            QMetaObject::invokeMethod(this, [this]() {
+                if (m_textEditor) {
+                    if (!m_textEditor->text().trimmed().isEmpty())
+                        commitTextInput();
+                    else
+                        cancelTextInput();
+                }
+            }, Qt::QueuedConnection);
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+// ──────────────────────────────────────────────
 // Paint
 // ──────────────────────────────────────────────
 
@@ -253,6 +440,7 @@ void AnnotationOverlay::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.fillRect(rect(), QColor(0, 0, 0, 1));
 
     if (!m_cachedPixmap.isNull())
@@ -264,6 +452,10 @@ void AnnotationOverlay::paintEvent(QPaintEvent*)
 
     if (m_drawing)
         renderStroke(painter, m_currentStroke);
+
+    // Draw committed text annotations
+    for (const TextAnnotation& ta : m_textAnnotations)
+        drawTextAnnotation(painter, ta);
 }
 
 // ──────────────────────────────────────────────
@@ -277,14 +469,21 @@ void AnnotationOverlay::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // Don't draw inside the toolbar area
+    // Don't draw/type inside the toolbar area
     if (m_toolbarExcludeRect.isValid() && m_toolbarExcludeRect.contains(event->pos())) {
         QWidget::mousePressEvent(event);
         return;
     }
 
+    // ── Text mode ────────────────────────────────────────────────────────
+    if (m_currentTool == AnnotationTool::Text) {
+        beginTextInput(event->position());
+        return;
+    }
+
+    // ── Pen / Eraser mode ────────────────────────────────────────────────
     // A new stroke clears the redo stack
-    m_undoStack.clear();
+    m_redoHistory.clear();
 
     m_currentStroke.points.clear();
     m_currentStroke.color    = m_penColor;
@@ -351,6 +550,7 @@ void AnnotationOverlay::mouseReleaseEvent(QMouseEvent* event)
     if (!m_currentStroke.points.isEmpty()) {
         renderStrokeToCache(m_currentStroke);
         m_strokes.append(m_currentStroke);
+        m_undoHistory.append({ActionType::Stroke, m_currentStroke, {}});
         emit strokeFinished(m_currentStroke);
         emit undoRedoChanged();
 
@@ -378,3 +578,4 @@ void AnnotationOverlay::resizeEvent(QResizeEvent* e)
     QWidget::resizeEvent(e);
     rebuildCache();
 }
+
