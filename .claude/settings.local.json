@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"D:/QTCode/screen-share/capture\")",
+      "Bash(cp \"D:/QTCode/other/screen-share/mac-window-capture-yzz/screencapturer.h\" \"D:/QTCode/other/screen-share/mac-window-capture-yzz/screencapturer.cpp\" \"D:/QTCode/other/screen-share/mac-window-capture-yzz/sourceenumerator.h\" \"D:/QTCode/other/screen-share/mac-window-capture-yzz/sourceenumerator.cpp\" \"D:/QTCode/other/screen-share/mac-window-capture-yzz/sharesourcepicker.h\" \"D:/QTCode/other/screen-share/mac-window-capture-yzz/sharesourcepicker.cpp\" \"D:/QTCode/screen-share/capture/\")",
+      "Bash(export PATH=\"/d/Qt/Tools/CMake_64/bin:/d/Qt/6.10.3/mingw_64/bin:/d/Qt/Tools/mingw1310_64/bin:$PATH\")",
+      "Bash(rm -rf build)",
+      "Bash(cmake -B build -G \"MinGW Makefiles\" -DCMAKE_BUILD_TYPE=Debug)",
+      "Bash(cmake --build build)",
+      "Bash(windeployqt build/screenShare.exe)"
+    ]
+  }
+}
