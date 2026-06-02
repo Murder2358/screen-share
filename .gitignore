@@ -36,3 +36,4 @@ Thumbs.db
 # md文件
 *.md
 !README.md
+.claude
